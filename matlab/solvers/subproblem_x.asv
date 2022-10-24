@@ -1,5 +1,5 @@
 function [X,info] = subproblem_x(X,PUorth,data)
-% I think this file is no longer used by solve_recovery_altmin.m
+% I think this file is no longer used 
 % Minimizes the subproblem in X in Alternating minimization using Manopt
 % min_{X} f(X,U) = trace( k(X) - P_U k(X) ) 
 %             st. X is in the manifold Ax=b

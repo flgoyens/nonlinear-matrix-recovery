@@ -18,14 +18,14 @@ X = zeros(n,s);
 
 if strcmp(distribution, 'normal')
     for i=1:n_subspace
-        %     U = orth(randn(n,dim_subspace));
-        U = qr(rand(n,dim_subspace),0);
+%             U = orth(randn(n,dim_subspace));
+        [U,~] = qr(rand(n,dim_subspace),"econ");
         X(:,(i-1)*p + (1:p) ) =  U*randn(dim_subspace,p);
     end
 elseif strcmp(distribution, 'uniform')
     for i=1:n_subspace
-        %     U = orth(randn(n,dim_subspace));
-        U = qr(randn(n,dim_subspace),0);
+            U = orth(randn(n,dim_subspace));
+%         U = qr(randn(n,dim_subspace),0);
         X(:,(i-1)*p + (1:p) ) =  2*U*(rand(dim_subspace,p)-0.5*ones(dim_subspace,p));
     end
 end

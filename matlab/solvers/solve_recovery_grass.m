@@ -5,7 +5,7 @@ function [f_end,x_end,rmse,grad_end,k,info, lambda_min,kappa] = solve_recovery_g
 % lifting depending on the geometry of the data. Handles matrix completion
 % (entry sensing) and dense sensing (A(X) = b).
 %
-% For kernel lift k:
+% For kernel map k:
 % min_{X,U} f(X,U) = trace( k(X) - P_U k(X) )
 %             st. U in Grass(s,r)
 %                 X is in the manifold Ax=b or P_omega(X) = b
@@ -16,7 +16,7 @@ function [f_end,x_end,rmse,grad_end,k,info, lambda_min,kappa] = solve_recovery_g
 %                 X is in the manifold Ax=b or P_omega(X) = b
 %                 X in R^{n x s}
 %
-% note that P_U = U*U' because U an orthogonal basis of the subspace.
+% note that P_U = U*U' with U an orthogonal basis of the subspace.
 %
 % Required input:
 % data.n
@@ -27,6 +27,7 @@ function [f_end,x_end,rmse,grad_end,k,info, lambda_min,kappa] = solve_recovery_g
 % data.model: 'monomial_kernel','gaussian_kernel'
 % data.measurements: 'dense','completion'
 % data.A and data.b or data.mask and data.samples
+% Todo: it would be better to have one notation for A and mask
 %
 % Optional input:
 % data.c (for monomial kernel)
@@ -43,29 +44,16 @@ s = data.s;
 r = data.r;
 
 if(~strcmp(data.model,'gaussian_kernel'))
-    % I should only define degree for polynomials 
     d = data.d;
     N=nchoosek(n+d,n);
-    % I need to be careful because for the fat chebyshev kernel N = (d+1)^n
-    % but then I only need s so that is fine
 end
 
 if(strcmp(data.measurements ,'dense'))
-    if(strcmp(data.model ,'monomial_features'))
-        problem.M = productmanifold(struct('X', linearfactoryAb(n,s,data.A,data.b),...
-            'U', grassmannfactory(N, r)));
-    else
         problem.M = productmanifold(struct('X', linearfactoryAb(n,s,data.A,data.b),...
             'U', grassmannfactory(s, r)));
-    end
 elseif(strcmp(data.measurements,'completion'))
-    if(strcmp(data.model ,'monomial_features'))
-        problem.M = productmanifold(struct('X', samplesfactory(n,s,data.mask,data.samples),...
-            'U', grassmannfactory(N, r)));
-    else
         problem.M = productmanifold(struct('X', samplesfactory(n,s,data.mask,data.samples),...
             'U', grassmannfactory(s, r)));
-    end
 else
     fprintf('Error: measurement type not recognized\n');
 end
@@ -140,7 +128,7 @@ elseif(strcmp(data.model,'monomial_kernel'))
     problem.ehess = @ehess_monomial_kernel;
     
 else
-    fprintf('Error: the model for the lifting is not recognized. Check data.model\n');
+    fprintf('Error: the embedding is not recognized. Check data.model\n');
 end
 
 
@@ -164,22 +152,6 @@ if(isfield(data, 'x0'))
     x0 = data.x0;
 else
     x0 = [];
-end
-
-% ---- Check derivatives
-if(~isfield(data,'checkgrad')) 
-    data.checkgrad = 0;
-end
-if(~isfield(data,'checkhess'))
-    data.checkhess = 0;
-end
-if(data.checkgrad ==1)
-figure();
-checkgradient(problem)
-end 
-if(data.checkhess ==1) 
-figure();
-checkhessian(problem)
 end
 
 % ---- Solve.
@@ -206,7 +178,7 @@ elseif(strcmp(solver, 'TR')||strcmp(solver, 'RTR'))
     if(isfield(data, 'maxiter'))
         options.maxiter = data.maxiter;
     else
-        options.maxiter = 100;
+        options.maxiter = 500;
     end
     [x, xcost, info] = trustregions(problem,x0,options);
 else
@@ -235,14 +207,12 @@ lambda_min = 1;
 kappa = 1;
 if(nargout >=7)
     [~, lambda_min] = hessianextreme(problem, x, 'min', []);
-%     [~, lambda_min] = hessianextreme(problem, data.x_true, 'min', []);
     if(lambda_min < -1e-6)
         fprintf('Warning: Hessian is not PSD at termination in solve_grass_uos.m\n');
     end
 end
 if(nargout == 8)
     [~, lambda_max] = hessianextreme(problem, x, 'max', []);
-%         [~, lambda_max] = hessianextreme(problem, data.x_true, 'max', []);
     kappa = lambda_max/lambda_min; % conditionning number of Hessian at solution
 end
 
