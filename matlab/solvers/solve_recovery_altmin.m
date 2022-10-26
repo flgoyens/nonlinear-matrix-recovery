@@ -13,8 +13,6 @@ function [f_end,X,rmse,grad_end,k,stats] = solve_recovery_altmin(data)
 % data.verbosity:
 %
 % 
-% 1) One concern is that the store will not be reset to 0 and so the
-% feval count will be wrong. 
 
 % sigma, d,c and PUorth are global variables.
 n = data.n;
@@ -119,14 +117,6 @@ grad_eval = zeros(1,data.maxiter);
 hess_eval = zeros(1,data.maxiter);
 times = zeros(1,data.maxiter);
 
-if(~isfield(data,'plot'))
-    data.plot = 0;
-end
-if(data.plot ==1)
-    figure(5); scatter3(X(1,:),X(2,:),X(3,:));
-end
-
-
 G = lift(X);
 
 if(data.random_svd)
@@ -137,8 +127,10 @@ else
 end
 PUorth = eye(size(G,1))-Ur*Ur';
 store = StoreDB();
+tic()
 norm_grad(1) = problem.M.norm(X,problem.M.egrad2rgrad(X,problem.egrad(X,store)));
 f_values(1) = problem.cost(X,store);
+times(1) = toc();
 if(isfield(data,'x_true'))
     errvec(1) = err(X);
 end
@@ -148,7 +140,7 @@ end
 % Alternating minimisation
 grad_norm_x = data.tolerance + 1;
 k = 1;
-tic()
+
 while( k<data.maxiter && grad_norm_x > data.tolerance)
 
     if(strcmp(data.decrease_type,'relative'))
@@ -158,19 +150,12 @@ while( k<data.maxiter && grad_norm_x > data.tolerance)
     stats = statscounters({'costcalls', 'gradcalls', 'hesscalls'});
     options.statsfun = statsfunhelper(stats);
     % subproblem in x
-    % TODO: I need to make sure subproblem uses new U in problem
-    % definition...
-    % and also that it starts with latest value of X as initial guess
     if(strcmp(data.solver, 'RTR'))
         [X, ~, info] = trustregions(problem,X,options);
     elseif(strcmp(data.solver, 'RSD'))
         [X, ~, info] = steepestdescent(problem,X,options);% Goldstein condition
     elseif(strcmp(data.solver, 'RLBFGS'))
         [X, ~, info] = rlbfgs(problem,X,options);
-    end
-
-    if(data.plot == 1)
-        figure(5); scatter3(X(1,:),X(2,:),X(3,:)); drawnow;
     end
 
     f_eval(k+1) = f_eval(k) + info(end).costcalls;
@@ -196,9 +181,8 @@ while( k<data.maxiter && grad_norm_x > data.tolerance)
     % storing values
     errvec(k+1) = err(X);
     norm_grad(k+1) = grad_norm_x;
-    f = problem.cost(X,store);
     f_values(k+1) = problem.cost(X,store);
-    times(k) = toc();
+    times(k+1) = toc();
     if(data.verbosity >=2)
         fprintf('Iter %d: Inner steps: %d. eps_x = %d. grad f_x(X_k+1,U_k)= %d. grad f(X_k+1,U_k+1) = %d. ||X-M||/sqrt(ns) = %d\n',...
             k, info(end).iter, options.tolgradnorm,  info(end).gradnorm, grad_norm_x,errvec(k+1));
@@ -213,22 +197,24 @@ end
 fprintf("Altmin ends in %d seconds and %d iterations with grad norm: %d and function value %d\n", time_solve,k, norm_grad(k),f_values(k));
 
 if(isfield(data,'x_true'))
-    fprintf('RMSE: %d\n',errvec(k-1));
+    fprintf('RMSE for Altmin: %d\n',errvec(k-1));
 end
-%     figure(12);
+%     figure();
 %     semilogy(0:(k-1),norm_grad(1:k) , '.-');
 %     xlabel('Iteration #');
 %     ylabel('Gradient norm');
 %     title('Convergence of alternative minimisation');
 
-stats.nsvd = k;
-stats.costcalls = f_eval(2:k);% what is indexed with iterations goes from 2 to k
-stats.gradcalls = grad_eval(2:k);
-stats.hesscalls = hess_eval(2:k);
-stats.costvalues = f_values(1:k);% index 1 is for x0, what is indexed with the points x_0...x_k...x_end
+stats.nsvd = k-1;
+stats.costcalls = f_eval(1:k);
+stats.gradcalls = grad_eval(1:k);
+stats.hesscalls = hess_eval(1:k);
+stats.costvalues = f_values(1:k);
 stats.gradnorms = norm_grad(1:k);
-stats.times = times(1:k-1);
+stats.times = times(1:k);
 stats.errors = errvec(1:k);
+stats.iter = 0:(k-1);
+
 
 grad_end = grad_norm_x;
 rmse = errvec(k-1);
@@ -266,14 +252,3 @@ f_end = problem.cost(X,store);
 
 
 end
-
-%     if(strcmp(solver, 'myArmijo'))
-%         params.epsilon_x = tol;
-%         [X,info] = backtracking_uos(X,A,PUorth,pinvA,b,params);% Armijo LS
-%     else % use MANOPT: solver: 'lbfgs', 'TRlinear','TRFD','TRhess','SD'
-%     end
-
-
-    %error_U = distanceG(Ur,Urnew);
-    % error_U = norm(PUorth*2*G*U,'fro'); % this is the projected gradient
-    % on the Grassmannian 
